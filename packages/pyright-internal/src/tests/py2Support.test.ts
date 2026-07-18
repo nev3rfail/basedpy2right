@@ -130,3 +130,24 @@ test('py2 raise-comma parses under 2.7', () => {
     const results = TestUtils.typeAnalyzeSampleFiles(['py2Raise.py'], configOptions);
     TestUtils.validateResults(results, 0);
 });
+
+test('print statement is an error under py3', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion3_10;
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2Print.py'], configOptions);
+    expect(results[0].errors.length).toBeGreaterThan(0);
+});
+
+test('exec statement is an error under py3', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion3_10;
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2Exec.py'], configOptions);
+    expect(results[0].errors.length).toBeGreaterThan(0);
+});
+
+test('raise-comma is an error under py3', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion3_10;
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2Raise.py'], configOptions);
+    expect(results[0].errors.length).toBeGreaterThan(0);
+});
