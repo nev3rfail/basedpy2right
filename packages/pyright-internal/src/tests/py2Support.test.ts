@@ -91,3 +91,18 @@ test('except-comma is an error under py3', () => {
     // at least one error. Observe the real count and set it; assert it is > 0 (non-zero).
     expect(results[0].errors.length).toBeGreaterThan(0);
 });
+
+test('py2 backtick desugars to repr under 2.7', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2Backtick.py'], configOptions);
+    TestUtils.validateResults(results, 0);
+});
+
+test('backtick is an error under py3', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion3_10;
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2Backtick.py'], configOptions);
+    TestUtils.validateResults(results, 1); // backticksIllegal
+});

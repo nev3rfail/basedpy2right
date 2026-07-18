@@ -4123,16 +4123,28 @@ export class Parser {
         if (nextToken.type === TokenType.Backtick) {
             this._getNextToken();
 
-            // Atoms with backticks are no longer allowed in Python 3.x, but they
-            // were a thing in Python 2.x. We'll parse them to improve parse recovery
-            // and emit an error.
-            this._addSyntaxError(LocMessage.backticksIllegal(), nextToken);
+            // Backtick-repr was Python 2 syntax and is illegal in Python 3.x.
+            // We always parse the inner expression for recovery; under a py2 target
+            // we desugar it to `repr(<expr>)`, otherwise we emit an error.
+            const isPy2 = isPython2(this._getLanguageVersion());
+            if (!isPy2) {
+                this._addSyntaxError(LocMessage.backticksIllegal(), nextToken);
+            }
 
             const expressionNode = this._parseTestListAsExpression(ErrorExpressionCategory.MissingExpression, () =>
                 LocMessage.expectedExpr()
             );
 
             this._consumeTokenIfType(TokenType.Backtick);
+
+            if (isPy2) {
+                const reprName = NameNode.create(
+                    IdentifierToken.create(nextToken.start, 0, 'repr', /* comments */ undefined)
+                );
+                const arg = ArgumentNode.create(undefined, expressionNode, ArgCategory.Simple);
+                return CallNode.create(reprName, [arg], /* trailingComma */ false);
+            }
+
             return expressionNode;
         }
 
