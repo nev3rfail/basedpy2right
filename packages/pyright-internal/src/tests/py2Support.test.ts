@@ -10,6 +10,10 @@ import {
 } from '../common/pythonVersion';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as TestUtils from './testUtils';
+import { ConfigOptions } from '../common/configOptions';
+import { Uri } from '../common/uri/uri';
+import { UriEx } from '../common/uri/uriUtils';
 
 test('pythonVersion2_7 constant is (2, 7)', () => {
     expect(pythonVersion2_7.major).toBe(2);
@@ -32,4 +36,20 @@ test('pyrightconfig schema pythonVersion pattern accepts 2.7', () => {
     expect(new RegExp(pattern).test('2.7')).toBe(true);
     expect(new RegExp(pattern).test('3.14')).toBe(true);
     expect(new RegExp(pattern).test('nonsense')).toBe(false);
+});
+
+test('py2 builtins resolve under python 2.7 + py2 typeshed', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    // Point analysis at the py2 stub set (replaces the bundled typeshed root).
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2builtins.py'], configOptions);
+    TestUtils.validateResults(results, 0);
+});
+
+test('py2 builtins are undefined under the default (py3) target', () => {
+    // No py2 typeshed, default version -> xrange/unicode/basestring are unknown.
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2builtins.py']);
+    // 3 undefined names (xrange, unicode, basestring).
+    TestUtils.validateResults(results, 3);
 });
