@@ -3208,7 +3208,65 @@ export class Parser {
             }
         }
 
+        if (isPython2(this._getLanguageVersion())) {
+            const nextToken = this._peekToken();
+            if (nextToken.type === TokenType.Identifier) {
+                const idValue = (nextToken as IdentifierToken).value;
+                if (idValue === 'print') {
+                    return this._parsePrintStatement();
+                }
+            }
+        }
+
         return this._parseExpressionStatement();
+    }
+
+    // Python 2 `print` statement, desugared to a call on the `print` builtin.
+    private _parsePrintStatement(): ExpressionNode {
+        const printToken = this._getNextToken() as IdentifierToken; // consume 'print'
+        const printName = NameNode.create(printToken);
+        const args: ArgumentNode[] = [];
+
+        // Chevron form: print >> f, a, b  ->  print(a, b, file=f)
+        let fileExpr: ExpressionNode | undefined;
+        if (this._consumeTokenIfOperator(OperatorType.RightShift)) {
+            fileExpr = this._parseTestExpression(/* allowAssignmentExpression */ false);
+            // A comma after the file expression introduces the value list.
+            this._consumeTokenIfType(TokenType.Comma);
+        }
+
+        let fileArg: ArgumentNode | undefined;
+        if (fileExpr) {
+            // Anchor the synthesized 'file' name token immediately after 'print' (not at
+            // printToken.start) so its zero-length range doesn't land inside/before printName's
+            // own range -- CallNode's children (printName, then args) must be listed in
+            // non-overlapping, increasing order.
+            const fileNameTokenStart = printToken.start + printToken.length;
+            const fileNameToken = IdentifierToken.create(fileNameTokenStart, 0, 'file', /* comments */ undefined);
+            fileArg = ArgumentNode.create(fileNameToken, fileExpr, ArgCategory.Simple);
+            fileArg.d.name = NameNode.create(fileNameToken);
+            fileArg.d.name.parent = fileArg;
+            args.push(fileArg);
+        }
+
+        // Positional values (comma-separated), possibly empty (bare `print`).
+        let trailingComma = false;
+        while (
+            this._peekTokenType() !== TokenType.NewLine &&
+            this._peekTokenType() !== TokenType.Semicolon &&
+            this._peekTokenType() !== TokenType.EndOfStream
+        ) {
+            const valueExpr = this._parseTestExpression(/* allowAssignmentExpression */ false);
+            args.push(ArgumentNode.create(undefined, valueExpr, ArgCategory.Simple));
+            if (this._consumeTokenIfType(TokenType.Comma)) {
+                trailingComma = true;
+                continue;
+            }
+            trailingComma = false;
+            break;
+        }
+
+        return CallNode.create(printName, args, trailingComma);
     }
 
     private _makeExpressionOrTuple(

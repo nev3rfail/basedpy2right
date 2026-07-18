@@ -106,3 +106,11 @@ test('backtick is an error under py3', () => {
     const results = TestUtils.typeAnalyzeSampleFiles(['py2Backtick.py'], configOptions);
     TestUtils.validateResults(results, 1); // backticksIllegal
 });
+
+test('py2 print statement parses under 2.7', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2Print.py'], configOptions);
+    TestUtils.validateResults(results, 0);
+});
