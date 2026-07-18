@@ -13,7 +13,7 @@ import { ConfigOptions, ExecutionEnvironment, matchFileSpecs } from '../common/c
 import { Host } from '../common/host';
 import { stubsSuffix } from '../common/pathConsts';
 import { getFileExtension, stripFileExtension } from '../common/pathUtils';
-import { PythonVersion } from '../common/pythonVersion';
+import { isPython2, PythonVersion } from '../common/pythonVersion';
 import { ServiceProvider } from '../common/serviceProvider';
 import { ServiceKeys } from '../common/serviceKeys';
 import * as StringUtils from '../common/stringUtils';
@@ -2075,9 +2075,21 @@ export class ImportResolver {
         importLogger?: ImportLogger,
         moduleDescriptor?: ImportedModuleDescriptor
     ) {
+        // Auto-select the bundled py2-typeshed stdlib when the target Python version
+        // is 2.x and the user has not supplied an explicit typeshedPath. An explicit
+        // typeshedPath (config or CLI) always wins. Only the stdlib root is swapped;
+        // third-party stubs continue to resolve from the py3 fallback.
+        let effectiveTypeshedPath = customTypeshedPath;
+        if (isPython2(pythonVersion) && !customTypeshedPath) {
+            const py2TypeshedRoot = PythonPathUtils.getPy2TypeShedFallbackPath(this.fileSystem);
+            if (py2TypeshedRoot) {
+                effectiveTypeshedPath = py2TypeshedRoot;
+            }
+        }
+
         const subdirectory = this._getTypeshedInfoProvider().getTypeshedSubdirectory(
             /* isStdLib */ true,
-            customTypeshedPath,
+            effectiveTypeshedPath,
             importLogger
         );
         if (
@@ -2085,7 +2097,7 @@ export class ImportResolver {
             moduleDescriptor &&
             !this._isStdlibTypeshedStubValidForVersion(
                 moduleDescriptor,
-                customTypeshedPath,
+                effectiveTypeshedPath,
                 pythonVersion,
                 pythonPlatform,
                 importLogger
