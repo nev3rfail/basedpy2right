@@ -6,6 +6,7 @@ import {
     isPython2,
     pythonVersion2_7,
     pythonVersion3_0,
+    pythonVersion3_10,
     pythonVersion3_14,
 } from '../common/pythonVersion';
 import * as fs from 'fs';
@@ -69,4 +70,24 @@ test('# type: comment is honored under 2.7', () => {
     configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
     const results = TestUtils.typeAnalyzeSampleFiles(['py2TypeComment.py'], configOptions);
     TestUtils.validateResults(results, 1);
+});
+
+test('py2 except-comma binds name under 2.7', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    // The bundled (py3) typeshed excludes `builtins` for versions < 3.0 (VERSIONS: "builtins: 3.0-"),
+    // so ValueError would be unresolved without pointing at the py2 stub set, as other 2.7-target
+    // tests in this file already do.
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2ExceptComma.py'], configOptions);
+    TestUtils.validateResults(results, 0);
+});
+
+test('except-comma is an error under py3', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion3_10;
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2ExceptComma.py'], configOptions);
+    // Under 3.10 `except ValueError, e:` is `except (ValueError, e):` with `e` undefined ->
+    // at least one error. Observe the real count and set it; assert it is > 0 (non-zero).
+    expect(results[0].errors.length).toBeGreaterThan(0);
 });

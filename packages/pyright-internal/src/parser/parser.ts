@@ -19,6 +19,7 @@ import { DiagnosticSink } from '../common/diagnosticSink';
 import { convertOffsetsToRange } from '../common/positionUtils';
 import {
     PythonVersion,
+    isPython2,
     latestStablePythonVersion,
     pythonVersion3_10,
     pythonVersion3_11,
@@ -1937,6 +1938,20 @@ export class Parser {
                 );
                 if (listResult.parseError) {
                     typeExpr = listResult.parseError;
+                } else if (
+                    isPython2(this._getLanguageVersion()) &&
+                    listResult.list.length === 2 &&
+                    this._peekKeywordType() !== KeywordType.As
+                ) {
+                    // Python 2: `except TYPE, name:` binds `name` (not a tuple of types).
+                    typeExpr = listResult.list[0];
+                    const bindTarget = listResult.list[1];
+                    if (bindTarget.nodeType === ParseNodeType.Name) {
+                        symbolName = bindTarget.d.token;
+                    } else {
+                        this._addSyntaxError(LocMessage.expectedNameAfterAs(), bindTarget);
+                    }
+                    isAsKeywordAllowed = false;
                 } else {
                     typeExpr = this._makeExpressionOrTuple(listResult, /* enclosedInParens */ false);
 
