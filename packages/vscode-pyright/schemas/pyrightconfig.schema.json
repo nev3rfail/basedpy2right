@@ -39,7 +39,7 @@
       "examples": [
         "3.7"
       ],
-      "pattern": "^3\\.[0-9]+$"
+      "pattern": "^[23]\\.[0-9]+$"
     },
     "pythonPlatform": {
       "type": "string",
