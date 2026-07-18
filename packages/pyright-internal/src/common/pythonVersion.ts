@@ -217,4 +217,13 @@ export const pythonVersion3_13 = PythonVersion.create(3, 13);
 export const pythonVersion3_14 = PythonVersion.create(3, 14);
 export const pythonVersion3_15 = PythonVersion.create(3, 15);
 
+// Python 2.7 target (this fork). See docs/py2-fork-maintenance.md.
+export const pythonVersion2_7 = PythonVersion.create(2, 7);
+
 export const latestStablePythonVersion = pythonVersion3_14;
+
+// Python 2 vs 3 discriminator. Every py2-specific code path is gated on this so the
+// fork's diff stays greppable and minimal.
+export function isPython2(version: PythonVersion): boolean {
+    return PythonVersion.isLessThan(version, pythonVersion3_0);
+}
