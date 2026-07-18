@@ -5,6 +5,7 @@ const { monorepoResourceNameMapper, tsconfigResolveAliases } = require('../../bu
 const rspack = createRequire(__filename)('@rspack/core');
 const outPath = path.resolve(__dirname, 'dist');
 const typeshedFallback = path.resolve(__dirname, '..', '..', 'docstubs');
+const py2Typeshed = path.resolve(__dirname, '..', '..', 'packages', 'pyright-internal', 'py2-typeshed');
 
 /** @type {(env: any, argv: { mode: 'production' | 'development' | 'none' }) => any} */
 module.exports = (_, { mode }) => {
@@ -53,6 +54,13 @@ module.exports = (_, { mode }) => {
                 },
             ],
         },
-        plugins: [new rspack.CopyRspackPlugin({ patterns: [{ from: typeshedFallback, to: 'typeshed-fallback' }] })],
+        plugins: [
+            new rspack.CopyRspackPlugin({
+                patterns: [
+                    { from: typeshedFallback, to: 'typeshed-fallback' },
+                    { from: py2Typeshed, to: 'py2-typeshed' },
+                ],
+            }),
+        ],
     };
 };
