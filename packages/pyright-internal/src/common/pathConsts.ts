@@ -7,6 +7,7 @@
  */
 
 export const typeshedFallback = 'typeshed-fallback';
+export const py2TypeshedFallback = 'py2-typeshed';
 export const lib = 'lib';
 export const libAlternate = 'Lib';
 export const lib64 = 'lib64';

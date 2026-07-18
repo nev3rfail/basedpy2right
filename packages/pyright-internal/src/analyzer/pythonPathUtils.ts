@@ -46,6 +46,31 @@ export function getTypeShedFallbackPath(fs: Pick<FileSystem, 'getModulePath' | '
     return undefined;
 }
 
+// Locates the bundled py2-typeshed root (containing `stdlib/`), resolved relative
+// to the module directory exactly like getTypeShedFallbackPath. Used to auto-select
+// the py2 stdlib stubs when the target Python version is 2.x and the user has not
+// supplied an explicit typeshedPath.
+export function getPy2TypeShedFallbackPath(fs: Pick<FileSystem, 'getModulePath' | 'existsSync' | 'realCasePath'>) {
+    const moduleDirectory = fs.getModulePath();
+    if (!moduleDirectory || moduleDirectory.isEmpty()) {
+        return undefined;
+    }
+
+    const py2TypeshedPath = moduleDirectory.combinePaths(pathConsts.py2TypeshedFallback);
+    if (fs.existsSync(py2TypeshedPath)) {
+        return fs.realCasePath(py2TypeshedPath);
+    }
+
+    // In the debug version of Pyright, the code is one level
+    // deeper, so we need to look one level up for the py2-typeshed fallback.
+    const debugPy2TypeshedPath = moduleDirectory.getDirectory().combinePaths(pathConsts.py2TypeshedFallback);
+    if (fs.existsSync(debugPy2TypeshedPath)) {
+        return fs.realCasePath(debugPy2TypeshedPath);
+    }
+
+    return undefined;
+}
+
 export function getTypeshedSubdirectory(typeshedPath: Uri, isStdLib: boolean) {
     return typeshedPath.combinePaths(isStdLib ? stdLibFolderName : thirdPartyFolderName);
 }
