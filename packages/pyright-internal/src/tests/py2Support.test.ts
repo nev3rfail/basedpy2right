@@ -53,3 +53,20 @@ test('py2 builtins are undefined under the default (py3) target', () => {
     // 3 undefined names (xrange, unicode, basestring).
     TestUtils.validateResults(results, 3);
 });
+
+test('sys.version_info pruning keeps py2 branch live under 2.7', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2VersionInfo.py'], configOptions);
+    // The else (py3) branch is statically dead under 2.7 -> its type error is not reported.
+    TestUtils.validateResults(results, 0);
+});
+
+test('# type: comment is honored under 2.7', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2TypeComment.py'], configOptions);
+    TestUtils.validateResults(results, 1);
+});
