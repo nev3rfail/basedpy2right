@@ -177,3 +177,28 @@ test('py2 __metaclass__ sets the effective metaclass under 2.7', () => {
         infos: [{ line: 8, message: 'Type of "C.flavor" is "str"' }],
     });
 });
+
+test('py2 classic division: int/int is int under 2.7', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2Division.py'], configOptions);
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [
+            { line: 2, message: 'Type of "a" is "int"' },
+            { line: 4, message: 'Type of "b" is "float"' },
+        ],
+    });
+});
+
+test('py2 __future__ division restores true division under 2.7', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2DivisionFuture.py'], configOptions);
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [{ line: 3, message: 'Type of "c" is "float"' }],
+    });
+});

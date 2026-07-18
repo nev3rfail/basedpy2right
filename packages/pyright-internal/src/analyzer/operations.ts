@@ -10,7 +10,7 @@
 
 import { DiagnosticAddendum } from '../common/diagnostic';
 import { DiagnosticRule } from '../common/diagnosticRules';
-import { PythonVersion, pythonVersion3_10 } from '../common/pythonVersion';
+import { isPython2, PythonVersion, pythonVersion3_10 } from '../common/pythonVersion';
 import { LocMessage } from '../localization/localize';
 import {
     AugmentedAssignmentNode,
@@ -22,6 +22,7 @@ import {
     UnaryOperationNode,
 } from '../parser/parseNodes';
 import { OperatorType } from '../parser/tokenizerTypes';
+import { AnalyzerFileInfo } from './analyzerFileInfo';
 import { getFileInfo } from './analyzerNodeInfo';
 import { getEnclosingLambda, isWithinLoop, operatorSupportsChaining, printOperator } from './parseTreeUtils';
 import { getScopeForNode } from './scopeUtils';
@@ -88,6 +89,19 @@ const binaryOperatorMap: { [operator: number]: [string, string] } = {
     [OperatorType.GreaterThan]: ['__gt__', '__lt__'],
     [OperatorType.GreaterThanOrEqual]: ['__ge__', '__le__'],
 };
+
+// Python 2 uses classic division: `/` dispatches to __div__/__rdiv__ (returning int
+// for int/int), not __truediv__/__rtruediv__ — unless `from __future__ import division`.
+function getBinaryOperatorDunders(operator: OperatorType, fileInfo: AnalyzerFileInfo): [string, string] {
+    if (
+        operator === OperatorType.Divide &&
+        isPython2(fileInfo.executionEnvironment.pythonVersion) &&
+        !fileInfo.futureImports.has('division')
+    ) {
+        return ['__div__', '__rdiv__'];
+    }
+    return binaryOperatorMap[operator];
+}
 
 // Map of operators that always return a bool result.
 const booleanOperatorMap: { [operator: number]: true } = {
@@ -1393,7 +1407,7 @@ function validateArithmeticOperation(
                         }
                     }
 
-                    const magicMethodName = binaryOperatorMap[operator][0];
+                    const magicMethodName = getBinaryOperatorDunders(operator, getFileInfo(errorNode))[0];
                     let resultTypeResult = evaluator.getTypeOfMagicMethodCall(
                         convertFunctionToObject(evaluator, leftSubtypeUnexpanded),
                         magicMethodName,
@@ -1426,7 +1440,7 @@ function validateArithmeticOperation(
 
                     if (!resultTypeResult) {
                         // Try the alternate form (swapping right and left).
-                        const altMagicMethodName = binaryOperatorMap[operator][1];
+                        const altMagicMethodName = getBinaryOperatorDunders(operator, getFileInfo(errorNode))[1];
                         resultTypeResult = evaluator.getTypeOfMagicMethodCall(
                             convertFunctionToObject(evaluator, rightSubtypeUnexpanded),
                             altMagicMethodName,
