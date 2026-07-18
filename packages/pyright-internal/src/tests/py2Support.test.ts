@@ -166,3 +166,14 @@ test('py2 user class instances type correctly under 2.7 (object.__new__ -> Self)
         ],
     });
 });
+
+test('py2 __metaclass__ sets the effective metaclass under 2.7', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2Metaclass.py'], configOptions);
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [{ line: 8, message: 'Type of "C.flavor" is "str"' }],
+    });
+});

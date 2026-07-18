@@ -10,6 +10,7 @@
  */
 
 import { fail } from '../common/debug';
+import { ExpressionNode } from '../parser/parseNodes';
 import { DeclarationType } from './declaration';
 import { Symbol, SymbolFlags, SymbolTable } from './symbol';
 
@@ -120,6 +121,9 @@ export class Scope {
     // Names defined by __slots__ within this scope (used only
     // for class scopes).
     slotsNames: string[] | undefined;
+
+    // Expression assigned to `__metaclass__` within a class body (Python 2 only).
+    metaclassExpr: ExpressionNode | undefined;
 
     constructor(
         type: ScopeType,
@@ -263,5 +267,13 @@ export class Scope {
 
     getSlotsNames(): string[] | undefined {
         return this.slotsNames;
+    }
+
+    setMetaclassExpr(expr: ExpressionNode) {
+        this.metaclassExpr = expr;
+    }
+
+    getMetaclassExpr(): ExpressionNode | undefined {
+        return this.metaclassExpr;
     }
 }

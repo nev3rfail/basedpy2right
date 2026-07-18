@@ -23,6 +23,7 @@ import { CreateTypeStubFileAction, Diagnostic, DiagnosticAddendum } from '../com
 import { DiagnosticRule } from '../common/diagnosticRules';
 import { stripFileExtension } from '../common/pathUtils';
 import { convertTextRangeToRange } from '../common/positionUtils';
+import { isPython2 } from '../common/pythonVersion';
 import { TextRange, getEmptyRange } from '../common/textRange';
 import { Uri } from '../common/uri/uri';
 import { LocAddendum, LocMessage } from '../localization/localize';
@@ -1120,6 +1121,16 @@ export class Binder extends ParseTreeWalker {
                     this._dunderSlotsEntries = undefined;
                 }
             }
+        }
+
+        // Python 2: `__metaclass__ = M` in a class body declares the metaclass.
+        if (
+            this._currentScope.type === ScopeType.Class &&
+            isPython2(this._fileInfo.executionEnvironment.pythonVersion) &&
+            node.d.leftExpr.nodeType === ParseNodeType.Name &&
+            node.d.leftExpr.d.value === '__metaclass__'
+        ) {
+            this._currentScope.setMetaclassExpr(node.d.rightExpr);
         }
 
         return false;

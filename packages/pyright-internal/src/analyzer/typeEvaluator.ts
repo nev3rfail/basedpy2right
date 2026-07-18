@@ -26,6 +26,7 @@ import { DiagnosticAddendum } from '../common/diagnostic';
 import { DiagnosticRule } from '../common/diagnosticRules';
 import { convertOffsetsToRange, convertOffsetToPosition } from '../common/positionUtils';
 import {
+    isPython2,
     PythonVersion,
     pythonVersion3_11,
     pythonVersion3_12,
@@ -18459,6 +18460,11 @@ export function createTypeEvaluator(
                 ) {
                     classType.shared.flags |= ClassTypeFlags.HasCustomClassGetItem;
                 }
+            }
+
+            // Python 2: a class-body `__metaclass__ = M` acts as `metaclass=M`.
+            if (!metaclassNode && isPython2(fileInfo.executionEnvironment.pythonVersion)) {
+                metaclassNode = innerScope?.getMetaclassExpr();
             }
 
             // Determine the effective metaclass.
