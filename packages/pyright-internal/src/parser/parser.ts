@@ -2979,7 +2979,17 @@ export class Parser {
             raiseNode.d.expr.parent = raiseNode;
             extendRange(raiseNode, raiseNode.d.expr);
 
-            if (this._consumeTokenIfKeyword(KeywordType.From)) {
+            if (isPython2(this._getLanguageVersion()) && this._consumeTokenIfType(TokenType.Comma)) {
+                raiseNode.d.valueExpr = this._parseTestExpression(/* allowAssignmentExpression */ true);
+                raiseNode.d.valueExpr.parent = raiseNode;
+                extendRange(raiseNode, raiseNode.d.valueExpr);
+
+                if (this._consumeTokenIfType(TokenType.Comma)) {
+                    raiseNode.d.tracebackExpr = this._parseTestExpression(/* allowAssignmentExpression */ true);
+                    raiseNode.d.tracebackExpr.parent = raiseNode;
+                    extendRange(raiseNode, raiseNode.d.tracebackExpr);
+                }
+            } else if (this._consumeTokenIfKeyword(KeywordType.From)) {
                 raiseNode.d.fromExpr = this._parseTestExpression(/* allowAssignmentExpression */ true);
                 raiseNode.d.fromExpr.parent = raiseNode;
                 extendRange(raiseNode, raiseNode.d.fromExpr);

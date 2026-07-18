@@ -1141,6 +1141,13 @@ export class Checker extends ParseTreeWalker {
             this._evaluator.verifyRaiseExceptionType(node.d.fromExpr, /* allowNone */ true);
         }
 
+        if (node.d.valueExpr) {
+            this._evaluator.getType(node.d.valueExpr);
+        }
+        if (node.d.tracebackExpr) {
+            this._evaluator.getType(node.d.tracebackExpr);
+        }
+
         return true;
     }
 

@@ -122,3 +122,11 @@ test('py2 exec statement parses under 2.7', () => {
     const results = TestUtils.typeAnalyzeSampleFiles(['py2Exec.py'], configOptions);
     TestUtils.validateResults(results, 0);
 });
+
+test('py2 raise-comma parses under 2.7', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2Raise.py'], configOptions);
+    TestUtils.validateResults(results, 0);
+});

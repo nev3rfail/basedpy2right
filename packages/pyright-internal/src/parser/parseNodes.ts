@@ -2318,6 +2318,8 @@ export namespace ReturnNode {
 export interface RaiseNode extends ParseNodeBase<ParseNodeType.Raise> {
     d: {
         expr?: ExpressionNode | undefined;
+        valueExpr?: ExpressionNode | undefined;
+        tracebackExpr?: ExpressionNode | undefined;
         fromExpr?: ExpressionNode | undefined;
     };
 }
