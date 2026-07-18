@@ -945,6 +945,9 @@ def ord(__c: Text | bytes) -> int: ...
 # This is only available after from __future__ import print_function.
 def print(*values: object, sep: Text | None = ..., end: Text | None = ..., file: SupportsWrite[Any] | None = ...) -> None: ...
 
+# Python 2 `exec` statement, desugared to a call on this builtin.
+def exec(source: object, globals: dict[str, Any] | None = ..., locals: dict[str, Any] | None = ...) -> None: ...
+
 _E = TypeVar("_E", contravariant=True)
 _M = TypeVar("_M", contravariant=True)
 

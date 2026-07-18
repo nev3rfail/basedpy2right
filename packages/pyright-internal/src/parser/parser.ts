@@ -3215,6 +3215,9 @@ export class Parser {
                 if (idValue === 'print') {
                     return this._parsePrintStatement();
                 }
+                if (idValue === 'exec') {
+                    return this._parseExecStatement();
+                }
             }
         }
 
@@ -3267,6 +3270,36 @@ export class Parser {
         }
 
         return CallNode.create(printName, args, trailingComma);
+    }
+
+    // Python 2 `exec` statement, desugared to a call on the `exec` builtin.
+    // exec CODE            -> exec(CODE)
+    // exec CODE in G       -> exec(CODE, G)
+    // exec CODE in G, L    -> exec(CODE, G, L)
+    private _parseExecStatement(): ExpressionNode {
+        const execToken = this._getNextToken() as IdentifierToken; // consume 'exec'
+        const execName = NameNode.create(execToken);
+        const args: ArgumentNode[] = [];
+
+        // CPython 2.7 grammar: exec_stmt: 'exec' expr ['in' test [',' test]]
+        // The code operand is 'expr' (bitwise-or level), NOT 'test' -- 'test' descends through
+        // 'comparison', which itself consumes a bare 'in' as a membership operator. Using
+        // _parseTestExpression here would swallow "in G" into the code expression itself,
+        // leaving a dangling ", L" for the 3-arg form (confirmed by RED: a bogus
+        // expectedNewlineOrSemicolon/expectedExpression pair on `exec CODE in G, L`).
+        const codeExpr = this._parseBitwiseOrExpression();
+        args.push(ArgumentNode.create(undefined, codeExpr, ArgCategory.Simple));
+
+        if (this._consumeTokenIfKeyword(KeywordType.In)) {
+            const globalsExpr = this._parseTestExpression(/* allowAssignmentExpression */ false);
+            args.push(ArgumentNode.create(undefined, globalsExpr, ArgCategory.Simple));
+            if (this._consumeTokenIfType(TokenType.Comma)) {
+                const localsExpr = this._parseTestExpression(/* allowAssignmentExpression */ false);
+                args.push(ArgumentNode.create(undefined, localsExpr, ArgCategory.Simple));
+            }
+        }
+
+        return CallNode.create(execName, args, /* trailingComma */ false);
     }
 
     private _makeExpressionOrTuple(
