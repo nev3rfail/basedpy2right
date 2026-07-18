@@ -1,6 +1,6 @@
 [project]
-name = "basedpyright"
-description = "static type checking for Python (but based)"
+name = "basedpy2right"
+description = "static type checking + LSP for Python 2.7 — a py2 necromancy fork of basedpyright (dist renamed; console scripts stay 'basedpyright' so the stock VS Code extension drives this fork)"
 dynamic = ["version"]
 authors = [
     { name = "detachhead", email = "detachhead@users.noreply.github.com" },
