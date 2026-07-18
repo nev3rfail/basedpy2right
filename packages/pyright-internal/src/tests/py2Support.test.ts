@@ -151,3 +151,18 @@ test('raise-comma is an error under py3', () => {
     const results = TestUtils.typeAnalyzeSampleFiles(['py2Raise.py'], configOptions);
     expect(results[0].errors.length).toBeGreaterThan(0);
 });
+
+test('py2 user class instances type correctly under 2.7 (object.__new__ -> Self)', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2ClassInstance.py'], configOptions);
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [
+            { line: 11, message: 'Type of "w" is "Widget"' },
+            { line: 12, message: 'Type of "w.name" is "str"' },
+            { line: 13, message: 'Type of "w.label()" is "str"' },
+        ],
+    });
+});
