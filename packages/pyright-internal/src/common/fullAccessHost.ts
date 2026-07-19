@@ -124,7 +124,13 @@ export class FullAccessHost extends LimitedAccessHost {
     override getPythonVersion(pythonPath?: Uri, importLogger?: ImportLogger): PythonVersion | undefined {
         try {
             const execOutput = this._executePythonInterpreter(pythonPath?.getFilePath(), (p) =>
-                this._executeCodeInInterpreter(p, ['-I'], extractVersion)
+                // `-E -s` (ignore PYTHON* env vars + no user site) instead of `-I`: `-I` is
+                // Python 3.4+ only, so a Python 2.7 interpreter rejects it ("Unknown option: -I")
+                // and exits without running the version script -- the version then comes back
+                // undefined and the caller silently falls back to a PATH-discovered py3
+                // interpreter. `-E -s` gives equivalent isolation on both py2 and py3; the cwd is
+                // already stripped in-script by the `removeCwdFromSysPath` preamble in extractVersion.
+                this._executeCodeInInterpreter(p, ['-E', '-s'], extractVersion)
             );
 
             const versionJson: any[] = JSON.parse(execOutput!);
