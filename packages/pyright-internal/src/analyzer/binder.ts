@@ -1123,9 +1123,12 @@ export class Binder extends ParseTreeWalker {
             }
         }
 
-        // Python 2: `__metaclass__ = M` in a class body declares the metaclass.
+        // Python 2: `__metaclass__ = M` declares the metaclass. In a class body it
+        // applies to that class; at module scope it becomes the default metaclass for
+        // base-less classes in the module. Record it on the enclosing scope either way;
+        // getTypeOfClass reads the class scope first, then the module scope.
         if (
-            this._currentScope.type === ScopeType.Class &&
+            (this._currentScope.type === ScopeType.Class || this._currentScope.type === ScopeType.Module) &&
             isPython2(this._fileInfo.executionEnvironment.pythonVersion) &&
             node.d.leftExpr.nodeType === ParseNodeType.Name &&
             node.d.leftExpr.d.value === '__metaclass__'

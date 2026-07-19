@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as TestUtils from './testUtils';
 import { ConfigOptions } from '../common/configOptions';
+import { DiagnosticRule } from '../common/diagnosticRules';
 import { Uri } from '../common/uri/uri';
 import { UriEx } from '../common/uri/uriUtils';
 
@@ -298,5 +299,65 @@ test('py2 old-style detection: 3-level chain=classic; builtin/mixed base=C3 unde
             { line: 52, message: 'Type of "Dd().x" is "str"' },
             { line: 76, message: 'Type of "Dm().x" is "str"' },
         ],
+    });
+});
+
+test('py2 old-style instance: object at MRO tail resolves ==/!= and __dict__/__class__', () => {
+    // FIX 1: excluding object from the old-style MRO flooded ordinary code with
+    // false positives. object is now kept at the MRO tail (classic ordering among
+    // real bases preserved), so ==/!= and .__dict__/.__class__ resolve via object.
+    // (Python 2's default total ordering for </> is a separate, pre-existing,
+    // out-of-MRO-scope concern -- see the sample header.)
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2OldStyleObjectTail.py'], configOptions);
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [
+            { line: 16, message: 'Type of "a == b" is "bool"' },
+            { line: 17, message: 'Type of "a != b" is "bool"' },
+            { line: 18, message: 'Type of "a.__dict__" is "dict[str, Any]"' },
+            { line: 19, message: 'Type of "a.__class__" is "type[A]"' },
+        ],
+    });
+});
+
+test('py2 old-style class takes no constructor args (object.__init__ reachable)', () => {
+    // FIX 1 / R2 MEDIUM: with object at the MRO tail, object.__init__/__new__ are
+    // reachable, so extra constructor arguments are rejected -- matching the
+    // Python 2.7 runtime "TypeError: this constructor takes no arguments".
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2OldStyleCtor.py'], configOptions);
+    TestUtils.validateResultsButBased(results, {
+        errors: [{ line: 9, code: DiagnosticRule.reportCallIssue }],
+    });
+});
+
+test('py2 __metaclass__ = type (class body) makes the class new-style (C3, str)', () => {
+    // FIX 2: `__metaclass__ = type` is new-style at runtime even without an
+    // explicit object base, so the diamond uses C3 -> str (not classic DFS -> int).
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2MetaclassTypeNewStyle.py'], configOptions);
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [{ line: 21, message: 'Type of "D().x" is "str"' }],
+    });
+});
+
+test('py2 module-level __metaclass__ = type makes base-less classes new-style (C3, str)', () => {
+    // FIX 2 (module-level form): a module-level `__metaclass__ = type` makes the
+    // base-less root class new-style, so the diamond uses C3 -> str.
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2MetaclassTypeModule.py'], configOptions);
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [{ line: 23, message: 'Type of "D().x" is "str"' }],
     });
 });

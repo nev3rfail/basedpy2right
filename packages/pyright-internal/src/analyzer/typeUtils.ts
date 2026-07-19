@@ -3465,11 +3465,16 @@ export function computeMroLinearization(classType: ClassType): boolean {
 
 // [py2] Computes the classic (pre-order, depth-first, left-to-right) MRO used by
 // old-style classes under a Python 2.x target. Unlike C3, later duplicates are
-// simply dropped (first occurrence wins), and `object` is NOT appended because
-// old-style classes do not derive from `object` at runtime. This reproduces the
-// real 2.7 interpreter's attribute search order (e.g. diamond D(B,C)/B(A)/C(A)
-// -> [D, B, A, C], so A wins over C), which deliberately DIVERGES from mypy's
-// C3-for-everything behavior (a documented oracle limitation, tracked as D4).
+// simply dropped (first occurrence wins). `object` is kept at the very TAIL of
+// the MRO: old-style classes are not object-derived at runtime, but excluding
+// object entirely floods ordinary 2.x code with false positives (every `==`,
+// `.__dict__`, constructor call, etc. would fail to resolve). Keeping object at
+// the tail makes an old-style class "new-style-like" for member/operator lookup
+// while preserving the classic ordering AMONG the real user bases -- which is
+// exactly and only the intended soundness delta. This reproduces the real 2.7
+// interpreter's attribute search order (e.g. diamond D(B,C)/B(A)/C(A) ->
+// [D, B, A, C, object], so A wins over C), which deliberately DIVERGES from
+// mypy's C3-for-everything behavior (a documented oracle limitation, D4).
 function computeClassicMroLinearization(classType: ClassType): boolean {
     // Clear out any existing MRO information.
     classType.shared.mro = [];
@@ -3487,6 +3492,11 @@ function computeClassicMroLinearization(classType: ClassType): boolean {
             (existing) => isInstantiableClass(existing) && ClassType.isSameGenericClass(existing, candidate)
         );
 
+    // `object` is held aside and appended exactly once at the tail (see the
+    // header comment). It reaches here through the implicit-object base of the
+    // root old-style class, so it is present in every base's classic MRO.
+    let objectType: ClassType | undefined;
+
     // Classic linearization is self followed by the classic MRO of each base,
     // left-to-right, keeping only the first occurrence of any class. Each base's
     // own `shared.mro` was itself computed classically (all bases of an old-style
@@ -3499,7 +3509,11 @@ function computeClassicMroLinearization(classType: ClassType): boolean {
             baseClass.shared.mro.forEach((mroClass) => {
                 let specialized = applySolvedTypeVars(mroClass, solution);
                 if (isInstantiableClass(specialized)) {
-                    if (!isAlreadyInMro(specialized)) {
+                    if (ClassType.isBuiltIn(specialized, 'object')) {
+                        // Hold object aside so it lands at the tail, not wherever
+                        // the first base's MRO happens to place it.
+                        objectType = objectType ?? specialized;
+                    } else if (!isAlreadyInMro(specialized)) {
                         classType.shared.mro.push(specialized);
                     }
                 } else {
@@ -3514,6 +3528,10 @@ function computeClassicMroLinearization(classType: ClassType): boolean {
             classType.shared.mro.push(isAnyOrUnknown(baseClass) ? baseClass : UnknownType.create());
         }
     });
+
+    if (objectType) {
+        classType.shared.mro.push(objectType);
+    }
 
     // Classic DFS always yields a valid ordering (it never fails the way C3 can).
     return true;

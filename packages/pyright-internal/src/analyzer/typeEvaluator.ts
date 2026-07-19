@@ -18313,31 +18313,58 @@ export function createTypeEvaluator(
             }
 
             // [py2] Detect old-style (classic) classes; see ClassTypeFlags.Py2OldStyle.
-            // A class is old-style iff, under a 2.x target, it is not stub-defined,
-            // all of its base arguments resolve to classes, and every such base is
-            // itself old-style. With zero bases the `every` is vacuously true, so a
-            // bare `class A:` is old-style. Stub-defined classes are excluded because
-            // typeshed omits the explicit `object` base on many builtins (e.g.
-            // `class int:`) that are nonetheless new-style at runtime. Bases are
-            // evaluated before the derived class, so their flag is already set when
-            // read here (verified on a 3-level chain).
+            // A class is old-style iff, under a 2.x target, it is not stub-defined, has
+            // no `type`-derived `__metaclass__`, all of its base arguments resolve to
+            // classes, and every such base is itself old-style. With zero bases the
+            // `every` is vacuously true, so a bare `class A:` is old-style. Stub-defined
+            // classes are excluded because typeshed omits the explicit `object` base on
+            // many builtins (e.g. `class int:`) that are nonetheless new-style at
+            // runtime. Detection reads the EXPLICIT bases -- it runs before the implicit
+            // `object` base is pushed below -- so a base-less class is still detected
+            // old-style. Bases are evaluated before the derived class, so their flag is
+            // already set when read here (verified on a 3-level chain).
             const classBaseClasses = classType.shared.baseClasses.filter((baseClass) => isClass(baseClass));
+
+            // [py2] A `__metaclass__` that resolves to `type` (or a type-derived
+            // metaclass) makes the class NEW-style even without an explicit `object`
+            // base -- `isinstance(cls, type)` is True at runtime, so stripping object
+            // and using classic MRO would be unsound. A class-body `__metaclass__`
+            // applies regardless of bases; a module-level one applies only to base-less
+            // classes (Python 2 otherwise takes the metaclass from the bases). Read the
+            // symbol the metaclass binder recorded rather than recomputing the effective
+            // metaclass.
+            let hasNewStyleMetaclass = false;
+            if (isPython2(fileInfo.executionEnvironment.pythonVersion)) {
+                const classScope = ScopeUtils.getScopeForNode(node.d.suite);
+                let py2MetaclassExpr = metaclassNode ?? classScope?.getMetaclassExpr();
+                if (!py2MetaclassExpr && classType.shared.baseClasses.length === 0) {
+                    py2MetaclassExpr = classScope?.getGlobalScope().scope.getMetaclassExpr();
+                }
+                if (py2MetaclassExpr) {
+                    const py2MetaclassType = getTypeOfExpression(py2MetaclassExpr, exprFlags).type;
+                    hasNewStyleMetaclass =
+                        isInstantiableClass(py2MetaclassType) && derivesFromStdlibClass(py2MetaclassType, 'type');
+                }
+            }
+
             const isPy2OldStyle =
                 isPython2(fileInfo.executionEnvironment.pythonVersion) &&
                 !ClassType.isDefinedInStub(classType) &&
+                !hasNewStyleMetaclass &&
                 classType.shared.baseClasses.every((baseClass) => isClass(baseClass)) &&
                 classBaseClasses.every((baseClass) => ClassType.isPy2OldStyle(baseClass));
 
             if (isPy2OldStyle) {
-                // Old-style classes are not object-derived at runtime: flag them and
-                // suppress the implicit `object` base so classic DFS MRO applies.
+                // Old-style classes use classic DFS MRO. `object` is NOT suppressed --
+                // it is kept at the MRO tail (see computeClassicMroLinearization) so
+                // ordinary member/operator lookup still resolves.
                 classType.shared.flags |= ClassTypeFlags.Py2OldStyle;
-            } else if (
-                // Make sure we don't have 'object' derive from itself. Infinite
-                // recursion will result.
-                !ClassType.isBuiltIn(classType, 'object') &&
-                classBaseClasses.length === 0
-            ) {
+            }
+
+            // Make sure we don't have 'object' derive from itself. Infinite
+            // recursion will result. (This now runs for old-style classes too, so
+            // object reaches the classic MRO tail via the root's implicit base.)
+            if (!ClassType.isBuiltIn(classType, 'object') && classBaseClasses.length === 0) {
                 // If there are no other (known) base classes, the class implicitly derives from object.
                 classType.shared.baseClasses.push(getBuiltInType(node, 'object'));
             }
