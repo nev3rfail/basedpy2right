@@ -16199,8 +16199,12 @@ export function createTypeEvaluator(
                     isValidTypeForm = false;
                 }
             } else if (itemExpr.nodeType === ParseNodeType.StringList) {
-                const isBytes = (itemExpr.d.strings[0].d.token.flags & StringTokenFlags.Bytes) !== 0;
                 // Python 2: `Literal[u'...']` is the distinct `unicode` builtin (see chooseStrClass).
+                // The class is chosen from the FIRST string piece only (strings[0]) -- intentionally
+                // NOT the .some()-based highest-wins promotion used in getTypeOfStringList. This matches
+                // mypy v0.971 --py2, where `Literal['a' u'b']` is str but `Literal[u'a' 'b']` is unicode
+                // (first-piece-wins). Do not "fix" this to scan all pieces.
+                const isBytes = (itemExpr.d.strings[0].d.token.flags & StringTokenFlags.Bytes) !== 0;
                 const isUnicode = (itemExpr.d.strings[0].d.token.flags & StringTokenFlags.Unicode) !== 0;
                 const isPy2 = isPython2(AnalyzerNodeInfo.getFileInfo(node).executionEnvironment.pythonVersion);
                 const value = itemExpr.d.strings.map((s) => s.d.value).join('');
