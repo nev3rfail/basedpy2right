@@ -237,3 +237,66 @@ test("py3 unchanged: u'...' is a legacy no-op (str), b'...' stays bytes", () => 
         ],
     });
 });
+
+test('py2 old-style diamond uses classic DFS MRO under 2.7', () => {
+    // Ground truth: the Python 2.7 runtime (NOT mypy, which wrongly uses C3 here).
+    // Old-style diamond D(B,C)/B(A)/C(A): classic MRO [D,B,A,C] -> A wins -> int.
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2OldStyleMro.py'], configOptions);
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [
+            { line: 27, message: 'Type of "d" is "D"' },
+            { line: 28, message: 'Type of "d.x" is "int"' },
+            { line: 29, message: 'Type of "d.who()" is "Literal[1]"' },
+        ],
+    });
+});
+
+test('py3 unchanged: the same diamond uses C3 MRO (str), still object-derived', () => {
+    // Default (py3) target, same source. Under py3 every class is new-style, so
+    // C3 applies: MRO [D,B,C,A,object] -> C wins -> str. Proves py3 is untouched.
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2OldStyleMro.py']);
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [
+            { line: 27, message: 'Type of "d" is "D"' },
+            { line: 28, message: 'Type of "d.x" is "str"' },
+            { line: 29, message: 'Type of "d.who()" is "Literal[\'c\']"' },
+        ],
+    });
+});
+
+test('py2 explicit object base keeps C3 MRO under 2.7 (new-style)', () => {
+    // An explicit `object` base makes the class new-style even under 2.7 -> C3 -> str.
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2OldStyleMroNewStyle.py'], configOptions);
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [
+            { line: 26, message: 'Type of "d.x" is "str"' },
+            { line: 27, message: 'Type of "d.who()" is "Literal[\'c\']"' },
+        ],
+    });
+});
+
+test('py2 old-style detection: 3-level chain=classic; builtin/mixed base=C3 under 2.7', () => {
+    // Chain A->B->B2 / A->C->C2 stays old-style (flag propagates) -> classic -> int.
+    // A builtin (dict) base or a new-style mixin flips the class to new-style -> C3 -> str.
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2OldStyleDetect.py'], configOptions);
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [
+            { line: 31, message: 'Type of "D().x" is "int"' },
+            { line: 52, message: 'Type of "Dd().x" is "str"' },
+            { line: 76, message: 'Type of "Dm().x" is "str"' },
+        ],
+    });
+});

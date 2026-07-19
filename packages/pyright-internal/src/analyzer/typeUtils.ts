@@ -3301,6 +3301,13 @@ export function isVarianceOfTypeArgCompatible(type: Type, typeParamVariance: Var
 // here: https://www.python.org/download/releases/2.3/mro/. It returns true
 // if an MRO was possible, false otherwise.
 export function computeMroLinearization(classType: ClassType): boolean {
+    // [py2] Old-style (classic) classes under a 2.x target use depth-first,
+    // left-to-right MRO instead of C3. This is gated on the Py2OldStyle flag,
+    // which is only ever set under a Python 2.x target, so py3 is unaffected.
+    if (ClassType.isPy2OldStyle(classType)) {
+        return computeClassicMroLinearization(classType);
+    }
+
     let isMroFound = true;
 
     // Clear out any existing MRO information.
@@ -3454,6 +3461,62 @@ export function computeMroLinearization(classType: ClassType): boolean {
     }
 
     return isMroFound;
+}
+
+// [py2] Computes the classic (pre-order, depth-first, left-to-right) MRO used by
+// old-style classes under a Python 2.x target. Unlike C3, later duplicates are
+// simply dropped (first occurrence wins), and `object` is NOT appended because
+// old-style classes do not derive from `object` at runtime. This reproduces the
+// real 2.7 interpreter's attribute search order (e.g. diamond D(B,C)/B(A)/C(A)
+// -> [D, B, A, C], so A wins over C), which deliberately DIVERGES from mypy's
+// C3-for-everything behavior (a documented oracle limitation, tracked as D4).
+function computeClassicMroLinearization(classType: ClassType): boolean {
+    // Clear out any existing MRO information.
+    classType.shared.mro = [];
+
+    // The first entry is always the class itself (specialized).
+    const selfSolution = buildSolutionFromSpecializedClass(classType);
+    let specializedSelf = applySolvedTypeVars(classType, selfSolution);
+    if (!isClass(specializedSelf) && !isAnyOrUnknown(specializedSelf)) {
+        specializedSelf = UnknownType.create();
+    }
+    classType.shared.mro.push(specializedSelf);
+
+    const isAlreadyInMro = (candidate: ClassType) =>
+        classType.shared.mro.some(
+            (existing) => isInstantiableClass(existing) && ClassType.isSameGenericClass(existing, candidate)
+        );
+
+    // Classic linearization is self followed by the classic MRO of each base,
+    // left-to-right, keeping only the first occurrence of any class. Each base's
+    // own `shared.mro` was itself computed classically (all bases of an old-style
+    // class are old-style), so concatenating them and de-duplicating reproduces
+    // the interpreter's depth-first, left-to-right search order. Type-var
+    // substitution mirrors the C3 path above.
+    classType.shared.baseClasses.forEach((baseClass) => {
+        if (isInstantiableClass(baseClass)) {
+            const solution = buildSolutionFromSpecializedClass(baseClass);
+            baseClass.shared.mro.forEach((mroClass) => {
+                let specialized = applySolvedTypeVars(mroClass, solution);
+                if (isInstantiableClass(specialized)) {
+                    if (!isAlreadyInMro(specialized)) {
+                        classType.shared.mro.push(specialized);
+                    }
+                } else {
+                    // Preserve Any/Unknown entries as-is (they are not de-duplicated).
+                    if (!isClass(specialized) && !isAnyOrUnknown(specialized)) {
+                        specialized = UnknownType.create();
+                    }
+                    classType.shared.mro.push(specialized);
+                }
+            });
+        } else {
+            classType.shared.mro.push(isAnyOrUnknown(baseClass) ? baseClass : UnknownType.create());
+        }
+    });
+
+    // Classic DFS always yields a valid ordering (it never fails the way C3 can).
+    return true;
 }
 
 // Returns zero or more unique module names that point to the place(s)

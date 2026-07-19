@@ -675,6 +675,12 @@ export const enum ClassTypeFlags {
     // This class is rejected when used as the second argument to
     // an isinstance or issubclass call.
     IllegalIsinstanceClass = 1 << 24,
+
+    // [py2] The class is an "old-style" (classic) class under a Python 2.x
+    // target: it does not derive (directly or transitively) from `object`.
+    // Such classes use classic depth-first MRO instead of C3. Only ever set
+    // when isPython2(version) is true, so it is inert under py3.
+    Py2OldStyle = 1 << 25,
 }
 
 export interface DataClassBehaviors {
@@ -1303,6 +1309,11 @@ export namespace ClassType {
 
     export function isPartiallyEvaluated(classType: ClassType) {
         return !!(classType.shared.flags & ClassTypeFlags.PartiallyEvaluated);
+    }
+
+    // [py2] True if this is an old-style (classic) class under a 2.x target.
+    export function isPy2OldStyle(classType: ClassType) {
+        return !!(classType.shared.flags & ClassTypeFlags.Py2OldStyle);
     }
 
     export function hasCustomClassGetItem(classType: ClassType) {

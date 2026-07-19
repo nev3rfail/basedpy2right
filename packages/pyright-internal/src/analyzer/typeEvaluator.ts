@@ -18312,11 +18312,31 @@ export function createTypeEvaluator(
                 }
             }
 
-            // Make sure we don't have 'object' derive from itself. Infinite
-            // recursion will result.
-            if (
+            // [py2] Detect old-style (classic) classes; see ClassTypeFlags.Py2OldStyle.
+            // A class is old-style iff, under a 2.x target, it is not stub-defined,
+            // all of its base arguments resolve to classes, and every such base is
+            // itself old-style. With zero bases the `every` is vacuously true, so a
+            // bare `class A:` is old-style. Stub-defined classes are excluded because
+            // typeshed omits the explicit `object` base on many builtins (e.g.
+            // `class int:`) that are nonetheless new-style at runtime. Bases are
+            // evaluated before the derived class, so their flag is already set when
+            // read here (verified on a 3-level chain).
+            const classBaseClasses = classType.shared.baseClasses.filter((baseClass) => isClass(baseClass));
+            const isPy2OldStyle =
+                isPython2(fileInfo.executionEnvironment.pythonVersion) &&
+                !ClassType.isDefinedInStub(classType) &&
+                classType.shared.baseClasses.every((baseClass) => isClass(baseClass)) &&
+                classBaseClasses.every((baseClass) => ClassType.isPy2OldStyle(baseClass));
+
+            if (isPy2OldStyle) {
+                // Old-style classes are not object-derived at runtime: flag them and
+                // suppress the implicit `object` base so classic DFS MRO applies.
+                classType.shared.flags |= ClassTypeFlags.Py2OldStyle;
+            } else if (
+                // Make sure we don't have 'object' derive from itself. Infinite
+                // recursion will result.
                 !ClassType.isBuiltIn(classType, 'object') &&
-                classType.shared.baseClasses.filter((baseClass) => isClass(baseClass)).length === 0
+                classBaseClasses.length === 0
             ) {
                 // If there are no other (known) base classes, the class implicitly derives from object.
                 classType.shared.baseClasses.push(getBuiltInType(node, 'object'));
