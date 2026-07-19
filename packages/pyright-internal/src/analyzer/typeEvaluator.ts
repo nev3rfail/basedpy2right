@@ -1657,6 +1657,15 @@ export function createTypeEvaluator(
         return typeResult;
     }
 
+    // Python 2: `u'...'` is the distinct `unicode` builtin; `'...'`/`b'...'` are `str`
+    // (py2 aliases bytes to str). A unicode piece anywhere in an implicit concatenation
+    // promotes the whole result to unicode, so unicode wins over bytes. Under py3 the
+    // Unicode flag is a legacy no-op and this collapses to the original bytes/str choice.
+    // Grounded against mypy v0.971 --py2.
+    function chooseStrClass(isBytes: boolean, isUnicode: boolean, isPy2: boolean): 'bytes' | 'str' | 'unicode' {
+        return isPy2 && isUnicode ? 'unicode' : isBytes ? 'bytes' : 'str';
+    }
+
     function getTypeOfStringList(node: StringListNode, flags: EvalFlags): TypeResult {
         let typeResult: TypeResult | undefined;
 
@@ -1666,11 +1675,17 @@ export function createTypeEvaluator(
 
         const isBytesNode = (node: StringNode | FormatStringNode) =>
             (node.d.token.flags & StringTokenFlags.Bytes) !== 0;
+        const isUnicodeNode = (node: StringNode | FormatStringNode) =>
+            (node.d.token.flags & StringTokenFlags.Unicode) !== 0;
 
-        // Check for mixing of bytes and str, which is not allowed.
+        const isPy2 = isPython2(AnalyzerNodeInfo.getFileInfo(node).executionEnvironment.pythonVersion);
+
+        // Check for mixing of bytes and str, which is not allowed. Python 2 aliases
+        // bytes to str, so `'x' b'y'` (and bytes+unicode) is legal there; the
+        // mixingBytesAndStr diagnostic is a py3-only rule.
         const firstStrIndex = node.d.strings.findIndex((str) => !isBytesNode(str));
         const firstBytesIndex = node.d.strings.findIndex((str) => isBytesNode(str));
-        if (firstStrIndex >= 0 && firstBytesIndex >= 0) {
+        if (!isPy2 && firstStrIndex >= 0 && firstBytesIndex >= 0) {
             addDiagnostic(
                 DiagnosticRule.reportGeneralTypeIssues,
                 LocMessage.mixingBytesAndStr(),
@@ -1681,6 +1696,8 @@ export function createTypeEvaluator(
         }
 
         const isBytes = firstBytesIndex >= 0;
+        // Python 2: a unicode piece anywhere promotes the implicit concatenation to unicode.
+        const isUnicode = node.d.strings.some(isUnicodeNode);
         let isLiteralString = true;
         let isIncomplete = false;
         let isTemplate = false;
@@ -1729,7 +1746,7 @@ export function createTypeEvaluator(
 
             if (!typeResult) {
                 typeResult = {
-                    type: getBuiltInObject(node, isBytes ? 'bytes' : 'str'),
+                    type: getBuiltInObject(node, chooseStrClass(isBytes, isUnicode, isPy2)),
                     isIncomplete,
                 };
             }
@@ -1737,7 +1754,7 @@ export function createTypeEvaluator(
             typeResult = {
                 type: cloneBuiltinObjectWithLiteral(
                     node,
-                    isBytes ? 'bytes' : 'str',
+                    chooseStrClass(isBytes, isUnicode, isPy2),
                     node.d.strings.map((s) => s.d.value).join('')
                 ),
                 isIncomplete,
@@ -1851,12 +1868,15 @@ export function createTypeEvaluator(
 
     function getTypeOfString(node: StringNode | FormatStringNode): TypeResult {
         const isBytes = (node.d.token.flags & StringTokenFlags.Bytes) !== 0;
+        // Python 2: `u'...'` is the distinct `unicode` builtin (see chooseStrClass).
+        const isUnicode = (node.d.token.flags & StringTokenFlags.Unicode) !== 0;
+        const isPy2 = isPython2(AnalyzerNodeInfo.getFileInfo(node).executionEnvironment.pythonVersion);
         let typeResult: TypeResult | undefined;
         let isIncomplete = false;
 
         if (node.nodeType === ParseNodeType.String) {
             typeResult = {
-                type: cloneBuiltinObjectWithLiteral(node, isBytes ? 'bytes' : 'str', node.d.value),
+                type: cloneBuiltinObjectWithLiteral(node, chooseStrClass(isBytes, isUnicode, isPy2), node.d.value),
                 isIncomplete,
             };
         } else {
@@ -1907,7 +1927,7 @@ export function createTypeEvaluator(
 
             if (!typeResult) {
                 typeResult = {
-                    type: getBuiltInObject(node, isBytes ? 'bytes' : 'str'),
+                    type: getBuiltInObject(node, chooseStrClass(isBytes, isUnicode, isPy2)),
                     isIncomplete,
                 };
 
@@ -16180,12 +16200,11 @@ export function createTypeEvaluator(
                 }
             } else if (itemExpr.nodeType === ParseNodeType.StringList) {
                 const isBytes = (itemExpr.d.strings[0].d.token.flags & StringTokenFlags.Bytes) !== 0;
+                // Python 2: `Literal[u'...']` is the distinct `unicode` builtin (see chooseStrClass).
+                const isUnicode = (itemExpr.d.strings[0].d.token.flags & StringTokenFlags.Unicode) !== 0;
+                const isPy2 = isPython2(AnalyzerNodeInfo.getFileInfo(node).executionEnvironment.pythonVersion);
                 const value = itemExpr.d.strings.map((s) => s.d.value).join('');
-                if (isBytes) {
-                    type = cloneBuiltinClassWithLiteral(node, classType, 'bytes', value);
-                } else {
-                    type = cloneBuiltinClassWithLiteral(node, classType, 'str', value);
-                }
+                type = cloneBuiltinClassWithLiteral(node, classType, chooseStrClass(isBytes, isUnicode, isPy2), value);
 
                 if ((flags & EvalFlags.TypeExpression) !== 0) {
                     itemExpr.d.strings.forEach((stringNode) => {

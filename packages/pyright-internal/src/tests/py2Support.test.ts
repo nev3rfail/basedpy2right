@@ -202,3 +202,38 @@ test('py2 __future__ division restores true division under 2.7', () => {
         infos: [{ line: 3, message: 'Type of "c" is "float"' }],
     });
 });
+
+test("py2 u'...' literals type as unicode; str/unicode implicit concat promotes under 2.7", () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+    configOptions.defaultPythonVersion = pythonVersion2_7;
+    configOptions.typeshedPath = UriEx.file(path.resolve(__dirname, '../../py2-typeshed'));
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2UnicodeLiteral.py'], configOptions);
+    // Ground truth: mypy v0.971 --py2. u'x'->unicode; 'x'/b'x'->str (py2 bytes==str);
+    // any unicode piece promotes the whole implicit concatenation to unicode; mixing
+    // bytes and str/unicode is legal under py2 (no mixingBytesAndStr diagnostic).
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [
+            { line: 6, message: 'Type of "type(u\'x\')" is "type[unicode]"' },
+            { line: 7, message: 'Type of "type(\'x\')" is "type[str]"' },
+            { line: 8, message: 'Type of "type(b\'x\')" is "type[str]"' },
+            { line: 9, message: 'Type of "type(\'a\' \'b\')" is "type[str]"' },
+            { line: 10, message: 'Type of "type(\'a\' u\'b\')" is "type[unicode]"' },
+            { line: 11, message: 'Type of "type(u\'a\' \'b\')" is "type[unicode]"' },
+            { line: 12, message: 'Type of "type(b\'x\' u\'y\')" is "type[unicode]"' },
+        ],
+    });
+});
+
+test("py3 unchanged: u'...' is a legacy no-op (str), b'...' stays bytes", () => {
+    // Default (py3) target. The py2 unicode path must not leak into py3 analysis.
+    const results = TestUtils.typeAnalyzeSampleFiles(['py2UnicodeLiteralPy3.py']);
+    TestUtils.validateResultsButBased(results, {
+        errors: [],
+        infos: [
+            { line: 2, message: 'Type of "type(u\'x\')" is "type[str]"' },
+            { line: 3, message: 'Type of "type(\'x\')" is "type[str]"' },
+            { line: 4, message: 'Type of "type(b\'x\')" is "type[bytes]"' },
+        ],
+    });
+});
