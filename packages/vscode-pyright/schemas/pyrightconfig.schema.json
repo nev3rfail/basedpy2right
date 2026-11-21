@@ -510,6 +510,11 @@
       "title": "Controls reporting overridden methods that are missing an `@override` decorator",
       "default": "none"
     },
+    "reportImplicitStringPromotion": {
+      "$ref": "#/definitions/diagnostic",
+      "title": "Report implicit Python 2 string promotions",
+      "default": "warning"
+    },
     "reportUnreachable": {
       "$ref": "#/definitions/diagnostic",
       "title": "Controls reporting of unreachable code",
@@ -944,6 +949,9 @@
     "reportImplicitOverride": {
       "$ref": "#/definitions/reportImplicitOverride"
     },
+    "reportImplicitStringPromotion": {
+      "$ref": "#/definitions/reportImplicitStringPromotion"
+    },
     "reportUnreachable": {
       "$ref": "#/definitions/reportUnreachable"
     },
@@ -1326,6 +1334,9 @@
           },
           "reportImplicitOverride": {
             "$ref": "#/definitions/reportImplicitOverride"
+          },
+          "reportImplicitStringPromotion": {
+            "$ref": "#/definitions/reportImplicitStringPromotion"
           },
           "reportUnreachable": {
             "$ref": "#/definitions/reportUnreachable"

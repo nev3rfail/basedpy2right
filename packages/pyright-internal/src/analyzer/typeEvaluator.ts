@@ -179,6 +179,12 @@ import * as ParseTreeUtils from './parseTreeUtils';
 import { assignTypeToPatternTargets, checkForUnusedPattern, narrowTypeBasedOnPattern } from './patternMatching';
 import { assignProperty } from './properties';
 import { assignClassToProtocol, assignModuleToProtocol } from './protocols';
+import {
+    acceptsPy2StringPromotion,
+    collectPy2StringPromotions,
+    getPy2PromotionNode,
+    tryPy2StringPromotion,
+} from './py2StringPromotion';
 import { Scope, ScopeType, SymbolWithScope } from './scope';
 import * as ScopeUtils from './scopeUtils';
 import { createSentinelType } from './sentinel';
@@ -3889,7 +3895,7 @@ export function createTypeEvaluator(
             const boundDeclaredType = makeTypeVarsBound(declaredType, liveScopeIds);
             const srcType = makeTypeVarsBound(typeResult.type, liveScopeIds);
 
-            if (!assignType(boundDeclaredType, srcType, diagAddendum)) {
+            if (!assignTypeAtExpression(srcExpression ?? nameNode, boundDeclaredType, srcType, diagAddendum)) {
                 // If there was an expected type mismatch, use that diagnostic
                 // addendum because it will be more informative.
                 if (expectedTypeDiagAddendum) {
@@ -6748,7 +6754,11 @@ export function createTypeEvaluator(
             }
 
             // Verify that the assigned type is compatible.
-            if (!assignType(type, usage.setType.type, diag?.createAddendum())) {
+            if (
+                !(usage.setErrorNode
+                    ? assignTypeAtExpression(usage.setErrorNode, type, usage.setType.type, diag?.createAddendum())
+                    : assignType(type, usage.setType.type, diag?.createAddendum()))
+            ) {
                 if (!usage.setType.isIncomplete) {
                     diag?.addMessage(
                         LocAddendum.memberAssignment().format({
@@ -6982,6 +6992,7 @@ export function createTypeEvaluator(
             // Provide "value" argument.
             argList.push({
                 argCategory: ArgCategory.Simple,
+                py2PromotionNode: usage.setErrorNode,
                 typeResult: {
                     type: usage.setType?.type ?? UnknownType.create(),
                     isIncomplete: !!usage.setType?.isIncomplete,
@@ -7245,6 +7256,7 @@ export function createTypeEvaluator(
             // Provide "value" argument.
             argList.push({
                 argCategory: ArgCategory.Simple,
+                py2PromotionNode: usage.setErrorNode,
                 typeResult: {
                     type: usage.setType?.type ?? UnknownType.create(),
                     isIncomplete: !!usage.setType?.isIncomplete,
@@ -8550,6 +8562,7 @@ export function createTypeEvaluator(
         const argList: Arg[] = [
             {
                 argCategory: ArgCategory.Simple,
+                py2PromotionNode: node.d.items.length === 1 ? node.d.items[0].d.valueExpr : node,
                 typeResult: { type: positionalIndexType, isIncomplete: isPositionalIndexTypeIncomplete },
             },
         ];
@@ -8569,6 +8582,7 @@ export function createTypeEvaluator(
 
             argList.push({
                 argCategory: ArgCategory.Simple,
+                py2PromotionNode: usage.setErrorNode,
                 typeResult: {
                     type: setType,
                     isIncomplete: !!usage.setType?.isIncomplete,
@@ -9653,9 +9667,21 @@ export function createTypeEvaluator(
         argParamMatches: MatchArgsToParamsResult[],
         constraints: ConstraintTracker | undefined,
         skipUnknownArgCheck: boolean | undefined,
-        inferenceContext: InferenceContext | undefined
+        inferenceContext: InferenceContext | undefined,
+        deferUnionPromotion: (() => void) | undefined
     ): CallResult {
         const returnTypes: Type[] = [];
+        let selectedPromotions: Map<ParseNode, Set<string>> | undefined;
+        let hasPromotedUnion = false;
+        const isPy2 = isPython2(AnalyzerNodeInfo.getFileInfo(errorNode).executionEnvironment.pythonVersion);
+        function recordSelectedPromotions(match: MatchedOverloadInfo) {
+            selectedPromotions = collectPy2StringPromotions(
+                match.matchResults.argParams,
+                match.argResults,
+                selectedPromotions
+            );
+        }
+
         let matchedOverloads: MatchedOverloadInfo[] = [];
         let isTypeIncomplete = false;
         let overloadsUsedForCall: FunctionType[] = [];
@@ -9669,6 +9695,29 @@ export function createTypeEvaluator(
             let possibleMatchResults: MatchedOverloadInfo[] = [];
             let possibleMatchInvolvesIncompleteUnknown = false;
             isDefinitiveMatchFound = false;
+
+            // Keep promotion-dependent matches in declaration order while looking for
+            // an overload that accepts this argument list without a promotion.
+            type Candidate = MatchedOverloadInfo & Pick<CallResult, 'anyOrUnknownArg'>;
+            let promotedMatches: Candidate[] | undefined;
+            function acceptMatch(match: Candidate) {
+                matchedOverload = match.overload;
+                overloadsUsedForCall.push(match.overload);
+                matchedOverloads.push(match);
+
+                if (match.anyOrUnknownArg || match.matchResults.unpackedArgOfUnknownLength) {
+                    possibleMatchResults.push(match);
+                    if (match.anyOrUnknownArg && isIncompleteUnknown(match.anyOrUnknownArg)) {
+                        possibleMatchInvolvesIncompleteUnknown = true;
+                    }
+                } else {
+                    if (isPy2 && expandedArgTypes.length > 1) {
+                        recordSelectedPromotions(match);
+                    }
+                    returnTypes.push(match.returnType);
+                    isDefinitiveMatchFound = true;
+                }
+            }
 
             for (let overloadIndex = 0; overloadIndex < argParamMatches.length; overloadIndex++) {
                 const overload = argParamMatches[overloadIndex].overload;
@@ -9706,29 +9755,36 @@ export function createTypeEvaluator(
                 }
 
                 if (!callResult.argumentErrors && callResult.returnType) {
-                    overloadsUsedForCall.push(overload);
-
-                    matchedOverload = overload;
-                    const matchedOverloadInfo: MatchedOverloadInfo = {
-                        overload: matchedOverload,
+                    const match: Candidate = {
+                        overload,
                         matchResults,
                         constraints: effectiveConstraints,
                         returnType: callResult.returnType,
                         argResults: callResult.argResults ?? [],
+                        anyOrUnknownArg: callResult.anyOrUnknownArg,
                     };
-                    matchedOverloads.push(matchedOverloadInfo);
 
-                    if (callResult.anyOrUnknownArg || matchResults.unpackedArgOfUnknownLength) {
-                        possibleMatchResults.push(matchedOverloadInfo);
-
-                        if (callResult.anyOrUnknownArg) {
-                            if (isIncompleteUnknown(callResult.anyOrUnknownArg)) {
-                                possibleMatchInvolvesIncompleteUnknown = true;
-                            }
-                        }
+                    if (isPy2 && match.argResults.some((arg) => arg.py2StringPromotion)) {
+                        (promotedMatches ??= []).push(match);
                     } else {
-                        returnTypes.push(callResult.returnType);
-                        isDefinitiveMatchFound = true;
+                        acceptMatch(match);
+                        if (isDefinitiveMatchFound) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!matchedOverload && promotedMatches) {
+                for (const candidate of promotedMatches) {
+                    if (
+                        deferUnionPromotion &&
+                        candidate.argResults.some((arg) => arg.py2StringPromotion && isUnion(arg.argType))
+                    ) {
+                        hasPromotedUnion = true;
+                    }
+                    acceptMatch(candidate);
+                    if (isDefinitiveMatchFound) {
                         break;
                     }
                 }
@@ -9745,6 +9801,9 @@ export function createTypeEvaluator(
 
                 // Did the filtering produce a single result? If so, we're done.
                 if (possibleMatchResults.length === 1) {
+                    if (isPy2 && expandedArgTypes.length > 1) {
+                        recordSelectedPromotions(possibleMatchResults[0]);
+                    }
                     overloadsUsedForCall = [possibleMatchResults[0].overload];
                     returnTypes.push(possibleMatchResults[0].returnType);
                     matchedOverloads = [possibleMatchResults[0]];
@@ -9813,6 +9872,11 @@ export function createTypeEvaluator(
             }
         }
 
+        if (hasPromotedUnion && deferUnionPromotion) {
+            deferUnionPromotion();
+            return { argumentErrors: true, isTypeIncomplete, overloadsUsedForCall };
+        }
+
         // We found a match for all of the expanded argument lists. Copy the
         // resulting type var context back into the caller's type var context.
         // Use the type var context from the last matched overload because it
@@ -9824,9 +9888,12 @@ export function createTypeEvaluator(
         // And run through the first expanded argument list one more time to
         // populate the type cache.
         const finalConstraints = constraints ?? matchedOverloads[0].constraints;
+        const replayMatch = selectedPromotions
+            ? { ...matchedOverloads[0].matchResults, py2SelectedPromotions: selectedPromotions }
+            : matchedOverloads[0].matchResults;
         const finalCallResult = validateArgTypesWithContext(
             errorNode,
-            matchedOverloads[0].matchResults,
+            replayMatch,
             finalConstraints,
             skipUnknownArgCheck,
             inferenceContext
@@ -10097,6 +10164,11 @@ export function createTypeEvaluator(
 
         let expandedArgTypes: (Type | undefined)[][] | undefined = [argList.map((arg) => undefined)];
 
+        let fallbackExpansion: (Type | undefined)[][] | undefined;
+        const rememberPromotedUnion = () => {
+            fallbackExpansion = expandedArgTypes;
+        };
+
         while (true) {
             const callResult = validateOverloadsWithExpandedTypes(
                 errorNode,
@@ -10104,7 +10176,8 @@ export function createTypeEvaluator(
                 filteredMatchResults,
                 constraints,
                 skipUnknownArgCheck,
-                inferenceContext
+                inferenceContext,
+                rememberPromotedUnion
             );
 
             if (callResult.isTypeIncomplete) {
@@ -10144,6 +10217,23 @@ export function createTypeEvaluator(
             // Check for combinatoric explosion and break out of loop.
             if (!expandedArgTypes || expandedArgTypes.length > maxTotalOverloadArgTypeExpansionCount) {
                 break;
+            }
+        }
+
+        // Expansion can hit its combination limit. A signature that accepted the
+        // union as a whole remains usable when expansion yields no better result.
+        if (fallbackExpansion) {
+            const fallbackResult = validateOverloadsWithExpandedTypes(
+                errorNode,
+                fallbackExpansion,
+                filteredMatchResults,
+                constraints,
+                skipUnknownArgCheck,
+                inferenceContext,
+                undefined
+            );
+            if (!fallbackResult.argumentErrors) {
+                return fallbackResult;
             }
         }
 
@@ -11212,6 +11302,7 @@ export function createTypeEvaluator(
                                 expandedArgList.push({
                                     ...arg,
                                     argCategory: ArgCategory.UnpackedList,
+                                    py2PromotionNode: arg.py2PromotionNode ?? arg.valueExpression,
                                     valueExpression: undefined,
                                     typeResult: {
                                         type: makeTupleObject(evaluatorInterface, [tupleTypeArg]),
@@ -11221,6 +11312,7 @@ export function createTypeEvaluator(
                                 expandedArgList.push({
                                     ...arg,
                                     argCategory: ArgCategory.Simple,
+                                    py2PromotionNode: arg.py2PromotionNode ?? arg.valueExpression,
                                     valueExpression: undefined,
                                     typeResult: {
                                         type: tupleTypeArg.type,
@@ -12637,6 +12729,18 @@ export function createTypeEvaluator(
             }
         });
 
+        if (
+            !canSkipDiagnosticForNode(errorNode) &&
+            isPython2(AnalyzerNodeInfo.getFileInfo(errorNode).executionEnvironment.pythonVersion)
+        ) {
+            const promotions = collectPy2StringPromotions(
+                matchResults.argParams,
+                argResults,
+                matchResults.py2SelectedPromotions
+            );
+            promotions?.forEach((paths, node) => reportPy2StringPromotion(node, [...paths].join(', ')));
+        }
+
         let paramSpecConstraints: (ConstraintTracker | undefined)[] = [];
 
         // Handle the assignment of additional arguments that map to a param spec.
@@ -13213,7 +13317,32 @@ export function createTypeEvaluator(
             assignTypeFlags |= AssignTypeFlags.ArgAssignmentFirstPass;
         }
 
-        if (!assignType(argParam.paramType, argType, diag?.createAddendum(), constraints, assignTypeFlags)) {
+        const useNode = getPy2PromotionNode(argParam);
+        const originalConstraints = isPython2(AnalyzerNodeInfo.getFileInfo(useNode).executionEnvironment.pythonVersion)
+            ? constraints.clone()
+            : undefined;
+        let py2StringPromotion: string | undefined;
+        const ordinaryMatch = assignType(
+            argParam.paramType,
+            argType,
+            diag?.createAddendum(),
+            constraints,
+            assignTypeFlags
+        );
+        if (!ordinaryMatch && originalConstraints) {
+            py2StringPromotion = tryPy2StringPromotion(
+                evaluatorInterface,
+                useNode,
+                argParam.paramType,
+                argType,
+                originalConstraints,
+                assignTypeFlags
+            );
+            if (py2StringPromotion) {
+                constraints.copyFromClone(originalConstraints);
+            }
+        }
+        if (!ordinaryMatch && !py2StringPromotion) {
             if (!options?.skipReportError) {
                 // Mismatching parameter types are common in untyped code; don't bother spending time
                 // printing types if the diagnostic is disabled.
@@ -13339,7 +13468,14 @@ export function createTypeEvaluator(
             }
         }
 
-        return { isCompatible, argType, isTypeIncomplete, skippedBareTypeVarExpectedType, condition };
+        return {
+            isCompatible,
+            argType,
+            isTypeIncomplete,
+            skippedBareTypeVarExpectedType,
+            condition,
+            py2StringPromotion,
+        };
     }
 
     function createTypeVarType(errorNode: ExpressionNode, classType: ClassType, argList: Arg[]): Type | undefined {
@@ -19171,12 +19307,15 @@ export function createTypeEvaluator(
                                     errorNode: arg.valueExpression ?? node.d.name,
                                 };
 
-                                validateArgType(
+                                const result = validateArgType(
                                     argParam,
                                     new ConstraintTracker(),
                                     { type: newMethodType },
                                     { skipUnknownArgCheck: true }
                                 );
+                                if (result.py2StringPromotion && !result.isTypeIncomplete) {
+                                    reportPy2StringPromotion(getPy2PromotionNode(argParam), result.py2StringPromotion);
+                                }
                                 paramMap.delete(arg.name.d.value);
                             } else {
                                 addDiagnostic(
@@ -19604,7 +19743,9 @@ export function createTypeEvaluator(
                     if (param.d.defaultValue && defaultValueType) {
                         const diagAddendum = new DiagnosticAddendum();
 
-                        if (!assignType(annotatedType, defaultValueType, diagAddendum)) {
+                        if (
+                            !assignTypeAtExpression(param.d.defaultValue, annotatedType, defaultValueType, diagAddendum)
+                        ) {
                             addDiagnostic(
                                 DiagnosticRule.reportArgumentType,
                                 LocMessage.paramAssignmentMismatch().format({
@@ -25181,6 +25322,26 @@ export function createTypeEvaluator(
         return isCompatible;
     }
 
+    function reportPy2StringPromotion(node: ParseNode, path: string) {
+        addDiagnostic(
+            DiagnosticRule.reportImplicitStringPromotion,
+            LocMessage.implicitStringPromotion().format({ path }),
+            node
+        );
+    }
+
+    function assignTypeAtExpression(node: ParseNode, dest: Type, src: Type, diag?: DiagnosticAddendum): boolean {
+        if (assignType(dest, src, diag)) {
+            return true;
+        }
+        const path = tryPy2StringPromotion(evaluatorInterface, node, dest, src);
+        if (!path) {
+            return false;
+        }
+        reportPy2StringPromotion(node, path);
+        return true;
+    }
+
     // Determines if the source type can be assigned to the dest type.
     // If constraint are provided, type variables within the destType are
     // matched against existing type variables in the map. If a type variable
@@ -25682,6 +25843,13 @@ export function createTypeEvaluator(
             }
 
             if (isClass(concreteSrcType) && TypeBase.isInstance(concreteSrcType)) {
+                if (
+                    flags & AssignTypeFlags.Py2StringPromotions &&
+                    acceptsPy2StringPromotion(destType, concreteSrcType, flags)
+                ) {
+                    return true;
+                }
+
                 // Handle the case where the source is an unpacked tuple.
                 if (
                     !destType.priv.isUnpacked &&
@@ -29427,6 +29595,7 @@ export function createTypeEvaluator(
         narrowConstrainedTypeVar,
         isTypeComparable,
         assignType,
+        assignTypeAtExpression,
         validateOverrideMethod,
         validateCallArgs,
         validateTypeArg,

@@ -592,6 +592,8 @@ export namespace Localizer {
             new ParameterizedString<{ name: string }>(getRawString('Diagnostic.globalReassignment'));
         export const globalRedefinition = () =>
             new ParameterizedString<{ name: string }>(getRawString('Diagnostic.globalRedefinition'));
+        export const implicitStringPromotion = () =>
+            new ParameterizedString<{ path: string }>(getRawString('Diagnostic.implicitStringPromotion'));
         export const implicitStringConcat = () => getRawString('Diagnostic.implicitStringConcat');
         export const importCycleDetected = () => getRawString('Diagnostic.importCycleDetected');
         export const importDepthExceeded = () =>

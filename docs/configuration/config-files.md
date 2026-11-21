@@ -284,6 +284,8 @@ The following settings allow more fine grained control over the **typeCheckingMo
 
 - <a name="reportImplicitOverride"></a> **reportImplicitOverride** [boolean or string, optional]: Generate or suppress diagnostics for overridden methods in a class that are missing an explicit `@override` decorator.
 
+- <a name="reportImplicitStringPromotion"></a> **reportImplicitStringPromotion** [boolean or string, optional]: Report Python 2 assignments and calls that rely on promotion from `str` to `unicode`, or from `bytearray` or `memoryview` to `str` or `unicode`. Defaults to `warning` in enabled type-checking modes. Set it to `none` to accept these uses silently or `error` to flag them as errors.
+
 ### basedpyright exclusive settings
 
 - <a name="reportAny"></a> **reportAny** [boolean or string, optional]: Generate or suppress diagnostics for expressions that have the `Any` type. this accounts for all scenarios not covered by the `reportUnknown*` rules (since "Unknown" isn't a real type, but a distinction pyright makes to disallow the `Any` type only in certain circumstances). [more info](../benefits-over-pyright/new-diagnostic-rules.md#reportany)

@@ -193,8 +193,8 @@ max-line-length = 200
 [tool.basedpyright]
 pythonVersion = "3.8"
 # https://github.com/DetachHead/basedpyright/issues/31
-ignore = ["basedpyright/dist", "packages", "docstubs", "node_modules", ".venv"]
-exclude = ["basedpyright/dist", "packages", "docstubs", "node_modules", ".venv"]
+ignore = ["basedpyright/dist", "packages", "docstubs", "node_modules", ".venv", "tools/string-corpus"]
+exclude = ["basedpyright/dist", "packages", "docstubs", "node_modules", ".venv", "tools/string-corpus"]
 reportImplicitStringConcatenation = false                                        # conflicts with ruff formatter
 reportIncompatibleUnannotatedOverride = 'error'
 reportUnannotatedClassAttribute = 'none'
@@ -216,6 +216,7 @@ extend-exclude = [
     "packages/pyright-internal/typeshed-fallback",
     "docstubs",
     "packages/pyright-internal/src/tests/samples",
+    "tools/string-corpus",  # Mixed Python 2/3 fixtures with intentional diagnostics.
     "packages/pyright-internal/src/tests/benchmarkData",
     "build/py_latest/upstream",
     "mypy_primer",                                       # upstream uses black & flake8

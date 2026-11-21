@@ -648,6 +648,7 @@
             "message": "\"{name}\" was already declared global",
             "comment": "{Locked='global'}"
         },
+        "implicitStringPromotion": "Implicit Python 2 string promotion ({path})",
         "implicitStringConcat": "Implicit string concatenation not allowed",
         "importCycleDetected": "Cycle detected in import chain",
         "importDepthExceeded": "Import chain depth exceeded {depth}",

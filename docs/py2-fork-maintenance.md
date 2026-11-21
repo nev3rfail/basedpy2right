@@ -42,3 +42,6 @@ is manually rebased onto the new `py2-base`.
 The exit criterion for `py2-base` is the oracle-diff harness (`statanal/tools/oracle-harness/`)
 against a py2 corpus that includes classes/`__metaclass__`: the divergences vs. mypy v0.971
 define the `py2` soundness backlog (metaclass first).
+
+For Python 2 string compatibility, see the [promotion rules and design decisions](py2-string-compatibility.md)
+and the [developer corpus methodology](../tools/string-corpus/README.md).
