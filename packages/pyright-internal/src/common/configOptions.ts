@@ -407,6 +407,9 @@ export interface DiagnosticRuleSet {
     // Report missing @override decorator.
     reportImplicitOverride: DiagnosticLevel;
 
+    // Report implicit Python 2 string promotions.
+    reportImplicitStringPromotion: DiagnosticLevel;
+
     // basedpyright options:
 
     /**
@@ -553,6 +556,7 @@ export function getDiagLevelDiagnosticRules() {
         DiagnosticRule.reportMatchNotExhaustive,
         DiagnosticRule.reportUnreachable,
         DiagnosticRule.reportImplicitOverride,
+        DiagnosticRule.reportImplicitStringPromotion,
         DiagnosticRule.reportAny,
         DiagnosticRule.reportExplicitAny,
         DiagnosticRule.reportIgnoreCommentWithoutRule,
@@ -690,6 +694,7 @@ export function getOffDiagnosticRuleSet(): DiagnosticRuleSet {
         reportMatchNotExhaustive: 'none',
         reportUnreachable: 'hint',
         reportImplicitOverride: 'none',
+        reportImplicitStringPromotion: 'none',
         failOnWarnings: false,
         strictGenericNarrowing: false,
         reportAny: 'none',
@@ -810,6 +815,7 @@ export function getBasicDiagnosticRuleSet(): DiagnosticRuleSet {
         reportMatchNotExhaustive: 'none',
         reportUnreachable: 'hint',
         reportImplicitOverride: 'none',
+        reportImplicitStringPromotion: 'warning',
         failOnWarnings: false,
         strictGenericNarrowing: false,
         reportAny: 'none',
@@ -931,6 +937,7 @@ export function getStandardDiagnosticRuleSet(): DiagnosticRuleSet {
         reportMatchNotExhaustive: 'none',
         reportUnreachable: 'hint',
         reportImplicitOverride: 'none',
+        reportImplicitStringPromotion: 'warning',
         failOnWarnings: false,
         strictGenericNarrowing: false,
         reportAny: 'none',
@@ -1050,6 +1057,7 @@ export const getRecommendedDiagnosticRuleSet = (): DiagnosticRuleSet => ({
     reportUnnecessaryTypeIgnoreComment: 'warning',
     reportMatchNotExhaustive: 'warning',
     reportImplicitOverride: 'warning',
+    reportImplicitStringPromotion: 'warning',
     failOnWarnings: true,
     strictGenericNarrowing: true,
     reportUnreachable: 'warning',
@@ -1167,6 +1175,7 @@ export const getAllDiagnosticRuleSet = (): DiagnosticRuleSet => ({
     reportUnnecessaryTypeIgnoreComment: 'error',
     reportMatchNotExhaustive: 'error',
     reportImplicitOverride: 'error',
+    reportImplicitStringPromotion: 'warning',
     failOnWarnings: true,
     strictGenericNarrowing: true,
     reportUnreachable: 'error',
@@ -1286,6 +1295,7 @@ export function getStrictDiagnosticRuleSet(): DiagnosticRuleSet {
         reportMatchNotExhaustive: 'error',
         reportUnreachable: 'hint',
         reportImplicitOverride: 'none',
+        reportImplicitStringPromotion: 'warning',
         failOnWarnings: false,
         strictGenericNarrowing: false,
         reportAny: 'none',

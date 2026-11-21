@@ -1029,7 +1029,7 @@ function assignConstrainedTypeVar(
                 concreteSrcType,
                 /* diag */ undefined,
                 /* constraints */ undefined,
-                AssignTypeFlags.Default,
+                flags & AssignTypeFlags.Py2StringPromotions,
                 recursionCount
             )
         ) {
@@ -1068,7 +1068,7 @@ function assignConstrainedTypeVar(
                         srcSubtype,
                         /* diag */ undefined,
                         /* constraints */ undefined,
-                        AssignTypeFlags.Default,
+                        flags & AssignTypeFlags.Py2StringPromotions,
                         recursionCount
                     )
                 ) {
@@ -1081,7 +1081,7 @@ function assignConstrainedTypeVar(
                             adjustedConstraint,
                             /* diag */ undefined,
                             /* constraints */ undefined,
-                            AssignTypeFlags.Default,
+                            flags & AssignTypeFlags.Py2StringPromotions,
                             recursionCount
                         )
                     ) {
@@ -1132,7 +1132,7 @@ function assignConstrainedTypeVar(
                     concreteSrcType,
                     /* diag */ undefined,
                     /* constraints */ undefined,
-                    AssignTypeFlags.Default,
+                    flags & AssignTypeFlags.Py2StringPromotions,
                     recursionCount
                 );
             });
@@ -1161,7 +1161,7 @@ function assignConstrainedTypeVar(
                 constrainedType,
                 /* diag */ undefined,
                 /* constraints */ undefined,
-                AssignTypeFlags.Default,
+                flags & AssignTypeFlags.Py2StringPromotions,
                 recursionCount
             )
         ) {
@@ -1174,7 +1174,7 @@ function assignConstrainedTypeVar(
                     curLowerBound,
                     /* diag */ undefined,
                     /* constraints */ undefined,
-                    AssignTypeFlags.Default,
+                    flags & AssignTypeFlags.Py2StringPromotions,
                     recursionCount
                 )
             ) {

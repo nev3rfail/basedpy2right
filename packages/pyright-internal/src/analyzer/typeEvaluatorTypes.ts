@@ -362,6 +362,7 @@ export interface AbstractSymbol {
 }
 
 export interface ArgBase {
+    py2PromotionNode?: ExpressionNode | undefined;
     argCategory: ArgCategory;
     node?: ArgumentNode | undefined;
     name?: NameNode | undefined;
@@ -445,6 +446,7 @@ export interface FunctionResult {
 }
 
 export interface ArgResult {
+    py2StringPromotion?: string | undefined;
     isCompatible: boolean;
     argType: Type;
     isTypeIncomplete?: boolean | undefined;
@@ -644,6 +646,18 @@ export const enum AssignTypeFlags {
     // or issubclass call.
     AllowIsinstanceSpecialForms = 1 << 14,
 
+    // Opt-in edges for a Python 2 value assignment. Ordinary comparisons leave these bits unset.
+    Py2StrToUnicode = 1 << 18,
+    Py2BytearrayToStr = 1 << 19,
+    Py2MemoryviewToStr = 1 << 20,
+    Py2BytearrayToUnicode = 1 << 21,
+    Py2MemoryviewToUnicode = 1 << 22,
+    Py2StringPromotions = Py2StrToUnicode |
+        Py2BytearrayToStr |
+        Py2MemoryviewToStr |
+        Py2BytearrayToUnicode |
+        Py2MemoryviewToUnicode,
+
     // When comparing two methods, skip the type check for the "self" or "cls"
     // parameters. This is used for variance inference and validation.
     SkipSelfClsParamCheck = 1 << 15,
@@ -663,6 +677,7 @@ export const enum AssignTypeFlags {
 }
 
 export interface MatchArgsToParamsResult {
+    py2SelectedPromotions?: Map<ParseNode, Set<string>>;
     overload: FunctionType;
     overloadIndex: number;
 
@@ -860,6 +875,7 @@ export interface TypeEvaluator {
         flags?: AssignTypeFlags,
         recursionCount?: number
     ) => boolean;
+    assignTypeAtExpression: (node: ParseNode, dest: Type, src: Type, diag?: DiagnosticAddendum) => boolean;
     validateOverrideMethod: (
         baseMethod: Type,
         overrideMethod: FunctionType | OverloadedType,

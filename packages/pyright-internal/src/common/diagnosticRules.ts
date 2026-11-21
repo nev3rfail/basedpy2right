@@ -105,6 +105,7 @@ export enum DiagnosticRule {
     reportMatchNotExhaustive = 'reportMatchNotExhaustive',
     reportUnreachable = 'reportUnreachable',
     reportImplicitOverride = 'reportImplicitOverride',
+    reportImplicitStringPromotion = 'reportImplicitStringPromotion',
 
     // basedpyright options:
     failOnWarnings = 'failOnWarnings',

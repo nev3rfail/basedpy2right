@@ -1006,7 +1006,14 @@ export class Checker extends ParseTreeWalker {
                     let diagAddendum = new DiagnosticAddendum();
                     let returnTypeMatches = false;
 
-                    if (this._evaluator.assignType(adjReturnType, returnType, diagAddendum)) {
+                    if (
+                        this._evaluator.assignTypeAtExpression(
+                            node.d.expr ?? node,
+                            adjReturnType,
+                            returnType,
+                            diagAddendum
+                        )
+                    ) {
                         returnTypeMatches = true;
                     } else {
                         // See if the declared return type includes one or more constrained TypeVars. If so,
@@ -1035,7 +1042,14 @@ export class Checker extends ParseTreeWalker {
                                 );
                                 adjReturnType = makeTypeVarsBound(adjReturnType, liveScopes);
 
-                                if (this._evaluator.assignType(adjReturnType, returnType, diagAddendum)) {
+                                if (
+                                    this._evaluator.assignTypeAtExpression(
+                                        node.d.expr ?? node,
+                                        adjReturnType,
+                                        returnType,
+                                        diagAddendum
+                                    )
+                                ) {
                                     returnTypeMatches = true;
                                 }
                             }

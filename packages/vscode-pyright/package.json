@@ -1612,6 +1612,23 @@
                                 false
                             ]
                         },
+                        "reportImplicitStringPromotion": {
+                            "type": [
+                                "string",
+                                "boolean"
+                            ],
+                            "description": "Report implicit Python 2 string promotions",
+                            "default": "warning",
+                            "enum": [
+                                "none",
+                                "hint",
+                                "information",
+                                "warning",
+                                "error",
+                                true,
+                                false
+                            ]
+                        },
                         "reportAny": {
                             "type": [
                                 "string",
